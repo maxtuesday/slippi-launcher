@@ -15,7 +15,7 @@ import { DolphinLaunchType } from "@dolphin/types";
 import { ipc_statsPageRequestedEvent } from "@replays/ipc";
 import { ipc_openSettingsModalEvent } from "@settings/ipc";
 import type CrossProcessExports from "electron";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, Menu, shell, Tray } from "electron";
 import log from "electron-log";
 import { autoUpdater } from "electron-updater";
 import * as fs from "fs-extra";
@@ -28,13 +28,14 @@ import { fileExists } from "utils/fileExists";
 
 import { installModules } from "./installModules";
 import { MenuBuilder } from "./menu";
-import { resolveHtmlPath } from "./util";
+import { getAssetPath, resolveHtmlPath } from "./util";
 
 const isMac = process.platform === "darwin";
 
 let menu: CrossProcessExports.Menu | null = null;
 let mainWindow: BrowserWindow | null = null;
 let didFinishLoad = false;
+let isQuiting = false;
 
 // Only allow a single Slippi App instance
 const lockObtained = app.requestSingleInstanceLock();
@@ -118,6 +119,21 @@ const createWindow = async () => {
     mainWindow = null;
   });
 
+  mainWindow.on("minimize", () => {
+    mainWindow?.hide();
+  });
+
+  mainWindow.on("close", (event) => {
+    if (!isQuiting) {
+      console.warn("!!! mainWindow close !!!");
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+    return false;
+  });
+
+  createTray(mainWindow);
+
   const menuBuilder = new MenuBuilder({
     mainWindow,
     onOpenPreferences: () => {
@@ -157,6 +173,8 @@ app.on("window-all-closed", () => {
     return;
   }
 
+  // here we can close the window but not quit the app so we can open it from the tray
+  console.log("!!! Closed window !!!");
   app.quit();
 });
 
@@ -295,6 +313,41 @@ const playReplayAndShowStats = async (filePath: string) => {
   if (mainWindow) {
     await ipc_statsPageRequestedEvent.main!.trigger({ filePath });
   }
+};
+
+const createTray = (mainWindow: BrowserWindow) => {
+  const tray = new Tray(getAssetPath("icon.ico"));
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Launch Netplay",
+      type: "normal",
+      click: async () => {
+        try {
+          await dolphinManager.launchNetplayDolphin();
+        } catch (e) {
+          console.error(e);
+        }
+      },
+    },
+    {
+      label: "Show Launcher",
+      click: () => {
+        mainWindow.show();
+      },
+    },
+    {
+      label: "Quit",
+      click: () => {
+        isQuiting = true;
+        app.quit();
+      },
+    },
+  ]);
+  tray.setToolTip("Slippi Launcher");
+  if (process.platform === "win32") {
+    tray.on("click", () => tray.popUpContextMenu());
+  }
+  tray.setContextMenu(contextMenu);
 };
 
 app
