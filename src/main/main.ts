@@ -315,8 +315,15 @@ const playReplayAndShowStats = async (filePath: string) => {
   }
 };
 
+const getIcon = (): string => {
+  if (process.platform === "win32") {
+    return "icon.ico";
+  }
+  return "icons/16x16.png";
+};
+
 const createTray = (mainWindow: BrowserWindow) => {
-  const tray = new Tray(getAssetPath("icon.ico"));
+  const tray = new Tray(getAssetPath(getIcon()));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: "Launch Netplay",
